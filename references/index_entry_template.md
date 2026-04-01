@@ -1,0 +1,1 @@
+- **[${DATE}] ${module_name}**: ${one_line_summary} → [details](.claude/process-summary/${module_name}/summary.md)
