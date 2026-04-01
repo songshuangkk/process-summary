@@ -1,49 +1,64 @@
 # Process-Summary
 
-一个为 Claude Code 设计的智能项目记忆维护工具。它通过“**主索引 + 模块化详情**”的架构，确保你的项目上下文在长期开发中始终保持精简且可追溯。
+A project memory management skill for Claude Code. Uses a "module-level index + external change history + modular detail files" architecture to keep CLAUDE.md lean regardless of project size.
 
-## 🌟 核心价值
+## Core Value
 
-在长周期开发中，`CLAUDE.md` 往往会因为信息堆积而变得臃肿，导致 Token 浪费和 AI 逻辑混乱。
-**Process Summary** 通过以下方式解决该问题：
+As `CLAUDE.md` grows bloated over time, token waste and AI confusion increase. Process Summary solves this with:
 
-- **增量总结**：仅记录本次需求的架构决策和核心逻辑。
-- **分层存储**：详细文档存放在 `.claude/summary/`，保持主文件轻量。
-- **自动索引**：在 `CLAUDE.md` 中生成点击可达的日期索引。
+- **Module-level indexing**: One line per module in CLAUDE.md — updated in place, never duplicated
+- **External change history**: Detailed change logs live in `.claude/process-summary/index.md`, not in CLAUDE.md
+- **Incremental capture**: Only record architectural decisions and core logic from the current change
+- **Layered storage**: Detailed docs live in `.claude/process-summary/`, keeping the main file lightweight
+- **Tiered compression**: Recent changes fully preserved, older entries progressively compressed by `maintain.sh`
 
-## 📂 项目结构
+## Project Structure
 
-安装后，你的项目将具备以下知识库结构：
+After installation, your project will have:
 
 ```
 your-project/
-├── CLAUDE.md                # 🚀 主索引 (保持在 200 行以内)
+├── CLAUDE.md                            # Module-level index (one line per module)
 └── .claude/
-    ├── summaries/           # 📦 模块化知识库
-    │   └── <module-name>.md  # 详细的架构与逻辑实现
-    └── skills/
-        └── process-summary/ # 🛠️ 本 Skill 定义
+    ├── process-summary/
+    │   ├── index.md                     # Change history across all modules
+    │   └── <module-name>/
+    │       └── summary.md               # Architecture and logic details
 ```
 
-## 🛠️ 使用方法
+## Usage
 
-在完成一个功能需求或代码重构后，在 Claude Code 终端输入：
+After completing a feature or refactoring, say in Claude Code:
 
 ```
-/process-summary [可选：需求简述]
+done
+更新项目记忆
+save context
 ```
 
-### **Skill 将自动执行以下操作：**
+To load module context when starting a new task:
 
-1. 扫描 `git diff` 识别代码变更。
-2. 提取核心逻辑、API 调用链路及注意事项。
-3. 在 `.claude/summary/` 下更新或创建对应的模块文档。
-4. 在 `CLAUDE.md` 的 `## Project Memory` 章节添加一行精简索引。
+```
+加载模块 auth
+retrieve auth
+```
 
-### 🤖 AI 架构师指令
+### What the skill does
 
-本 Skill 强制 Claude 以**领域架构师**身份思考，输出内容遵循：
+1. Scans `git diff` to identify code changes
+2. Extracts core logic, API call chains, and risks (Watch Out)
+3. Creates or updates module summaries under `.claude/process-summary/`
+4. Updates the module's one-line entry in `CLAUDE.md` (replaces, never appends)
+5. Appends change history to `.claude/process-summary/index.md`
 
-- **无废话**：直接描述技术干货，拒绝“在本节中...”等冗余表达。
-- **高压缩比**：将复杂的代码逻辑提炼为 5-10 行的架构描述。
-- **风险预警**：自动识别并记录潜伏的代码坑点。
+## Files
+
+| File | Purpose |
+|------|---------|
+| `SKILL.md` | Skill definition and instructions |
+| `scripts/capture.sh` | Identify changed files from git or filesystem |
+| `scripts/retrieve.sh` | Search module summaries by keyword |
+| `scripts/maintain.sh` | Compress summary files exceeding 150 lines, or index.md exceeding 200 lines |
+| `references/module_template.md` | Template for summary file structure |
+| `references/index_entry_template.md` | Template for CLAUDE.md module-level index |
+| `references/index_history_template.md` | Template for external change history file |

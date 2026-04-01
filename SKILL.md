@@ -1,36 +1,130 @@
 ---
 name: process-summary
-description: 动态管理 Claude Code 开发中的项目上下文。通过维护轻量级索引，将详细架构知识持久化至模块化文件中。
-metadata:
-  version: 1.1.0
-  author: bryan.song
+description: >
+  Captures and retrieves project architectural knowledge after code changes.
+  Creates modular summaries under .claude/process-summary/ with a lightweight
+  module-level index in CLAUDE.md. Use when the user says "done", "更新项目记忆",
+  "save context", "capture", after git commits, when starting new tasks,
+  loading module context, or when asking about a specific module's implementation.
 ---
-## Principles & Constraints
-- **Strict Factuality**: 仅记录客观事实（算法、接口、配置），禁止叙述性废话（如 "In this section...", "We decided to..."）。
-- **Imperative Tone**: 必须使用祈使句（如 "Use X to Y", "Require Redis 6+"）。
-- **Lean Index**: 强制 `CLAUDE.md` 保持在 120 行以内。
-- **Atomic Operations**: 复杂逻辑通过调用 `scripts/` 中的脚本执行，确保执行的确定性。
 
-## Workflows
+# Process Summary
 
-### 1. Capture Mode (增量更新)
-**Trigger**: 用户说 "done"、"更新项目记忆" 或检测到 Git 提交。
-1. **分析**: 运行 `scripts/capture.sh`。若无返回，则询问用户修改了哪些文件。
-2. **知识提取**:
-   - 识别模块名：依据路径（如 `src/features/payment/`）或文件名。
-   - 捕获 WHY、KEY LOGIC 和 WATCH OUT (风险/破坏性改动)。
-   - 扫描 `import` 语句识别跨模块依赖。
-3. **持久化**:
-   - 检查目标模块文件行数，若 > 150 行，调用 `scripts/maintain.sh` 执行压缩算法。
-   - 使用 `references/module_template.md` 结构写入新内容。
-4. **索引**: 使用 `references/index_entry_template.md` 更新 `CLAUDE.md` 的 `Active Modules`。
+## Instructions
 
-### 2. Retrieve Mode (上下文加载)
-**Trigger**: 用户开始新任务或询问特定模块。
-1. **匹配**: 运行 `scripts/retrieve.sh <keyword>`。
-2. **呈现**: 加载该模块的 Overview、最近 3 条变更以及所有历史记录中的 "Watch Out" 警示。
-3. **递归加载**: 若存在跨模块依赖，建议用户同时加载相关上下文。
+### Capture Mode
+
+Trigger: user says "done", "更新项目记忆", "save context", "capture", or after a git commit.
+
+1. Run `scripts/capture.sh` to identify changed files
+2. For each logical module affected, extract knowledge using the template at [references/module_template.md](references/module_template.md):
+   - **Why**: What problem does this change solve?
+   - **Key Logic**: Core algorithm or interface changes
+   - **Watch Out**: Breaking changes, concurrency risks, or gotchas
+3. Write summary to `.claude/process-summary/{module_name}/summary.md`
+4. If the summary file exceeds 150 lines, run `scripts/maintain.sh {file_path}`
+5. Update **CLAUDE.md** using [references/index_entry_template.md](references/index_entry_template.md):
+   - Search for an existing entry with `**{module_name}**:`
+   - If found: replace that line with the updated overview
+   - If not found: add a new line under the `### Process Summary` section
+   - **Never append a duplicate entry for the same module**
+6. Update **change history** in `.claude/process-summary/index.md` using [references/index_history_template.md](references/index_history_template.md):
+   - Append a `- [DATE] change_title` line under the corresponding `## {module_name}` section
+   - Create the section if this is the first change for this module
+   - If the file exceeds 200 lines, run `scripts/maintain.sh .claude/process-summary/index.md`
+
+### Retrieve Mode
+
+Trigger: user says "开始新任务", "加载模块", "retrieve", or asks about a specific module's implementation.
+
+1. Run `scripts/retrieve.sh {keyword}` to locate relevant module files
+2. Load and present the Overview section and all historical Watch Out warnings
+3. Check the Dependencies field and suggest loading related modules to prevent side effects
+
+## Principles
+
+- **Factuality**: Record only objective facts, no narrative filler
+- **Imperative tone**: Use imperative sentences ("Use X to Y")
+- **Token budget**: CLAUDE.md index = one line per module (no growth per change); each summary file under 150 lines
+- **Risk first**: Watch Out has the highest retention priority — never drop during compression
 
 ## Error Handling
-- **No Git**: 回退至 `find -mtime -1` 扫描最近 24 小时修改的文件。
-- **Name Collision**: 发现相似模块名（如 "user" 与 "user-profile"）时必须提示用户确认。
+
+- **No git**: Fall back to `find -mtime -1` for files modified in the last 24 hours
+- **Naming conflict**: If similar module names exist (e.g., `auth` vs `auth-api`), stop and ask the user
+- **Script failure**: Manually analyze file changes and complete the record, then report the error
+
+## Examples
+
+**Example 1 — Capture after implementing JWT auth**
+
+User says "done" after implementing JWT authentication.
+
+Summary written to `.claude/process-summary/auth/summary.md`:
+
+```markdown
+# Auth Context
+
+## Overview
+JWT-based authentication with refresh token rotation
+
+## Core Components
+- `src/middleware/auth.ts`: Token validation middleware
+- `src/routes/login.ts`: Login endpoint with credential verification
+
+## Dependencies
+- redis (token blacklist)
+
+---
+
+## Recent Changes
+
+### [2026-04-01] Implement JWT authentication
+**Modified**: src/middleware/auth.ts, src/routes/login.ts
+**Why**: Replace session-based auth for stateless horizontal scaling
+**Key Logic**: RS256 signed tokens, 15min access + 7day refresh, Redis blacklist on logout
+**Watch Out**: Token rotation race condition — concurrent refresh requests may generate orphaned tokens
+```
+
+CLAUDE.md index updated (one line per module, replaced on update):
+
+```markdown
+### Process Summary
+
+- **auth**: JWT auth with refresh token rotation → [details](.claude/process-summary/auth/summary.md)
+```
+
+Change history appended to `.claude/process-summary/index.md`:
+
+```markdown
+## auth
+- [2026-04-01] Implement JWT authentication
+```
+
+**Example 2 — Second update to the same module**
+
+User says "done" after adding refresh token rotation.
+
+CLAUDE.md entry updated in-place (not appended):
+
+```markdown
+### Process Summary
+
+- **auth**: JWT auth with refresh token rotation and concurrent-request protection → [details](.claude/process-summary/auth/summary.md)
+```
+
+Change history appended:
+
+```markdown
+## auth
+- [2026-04-01] Add refresh token rotation with race condition handling
+- [2026-04-01] Implement JWT authentication
+```
+
+**Example 3 — Retrieve module context**
+
+User says "加载 auth 模块的上下文".
+
+1. Run `scripts/retrieve.sh auth`
+2. Present Overview and all Watch Out entries from `.claude/process-summary/auth/summary.md`
+3. Suggest: "This module depends on redis. Load that module too?"
