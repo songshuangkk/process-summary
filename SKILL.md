@@ -1,11 +1,10 @@
 ---
 name: process-summary
-description: >
-  Captures and retrieves project architectural knowledge after code changes.
-  Creates modular summaries under .claude/process-summary/ with a lightweight
-  module-level index in CLAUDE.md. Use when the user says "done", "更新项目记忆",
-  "save context", "capture", after git commits, when starting new tasks,
-  loading module context, or when asking about a specific module's implementation.
+description: |
+  Manages project memory and keeps CLAUDE.md lean by modularizing context.
+  Use when the user says "done", "task finished", "save context", "capture progress", or "update summaries".
+  This skill triggers after completing a feature or refactor to analyze git changes and update module-specific summaries in .claude/process-summary/.
+allowed-tools: ["Bash"]
 ---
 
 # Process Summary
