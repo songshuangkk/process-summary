@@ -1,10 +1,10 @@
-# Process Summary v3.2
+# Process Summary v3.3
 
 个人本地 Claude Code 知识库：通过显式 topic 拓扑，以最小上下文定位业务事实、关键决策和已知风险。
 
 ## 设计
 
-- `topology.tsv` 是机器路由层：输入 topic、代码路径、接口、表或事件，得到主 topic 和一跳关联节点。
+- `topology.tsv` 是机器路由层；`edges.tsv` 是带代码证据和验证日期的关系层。
 - `summary.md` 是人类可读的当前知识层：现状、决策、风险与直接关系。
 - 源码是最终事实源；高风险修改必须回读实现验证。
 
@@ -19,6 +19,8 @@ git clone https://github.com/songshuangkk/process-summary.git \
 mkdir -p .claude/process-summary
 cp ~/.claude/skills/process-summary/references/topology_template.tsv \
   .claude/process-summary/topology.tsv
+cp ~/.claude/skills/process-summary/references/edges_template.tsv \
+  .claude/process-summary/edges.tsv
 ```
 
 ## 常用命令
@@ -34,6 +36,7 @@ bash scripts/retrieve.sh table_name
 
 # 拓扑完整性校验
 bash scripts/topology.sh check
+bash scripts/topology.sh audit 2026-04-18
 
 # 仅压缩一个摘要的变更历史
 bash scripts/maintain.sh .claude/process-summary/module/topic/summary.md
@@ -50,6 +53,7 @@ process-summary/
 ├── README.md
 ├── references/
 │   ├── topology_template.tsv
+│   ├── edges_template.tsv
 │   └── module_template.md
 └── scripts/
     ├── capture.sh

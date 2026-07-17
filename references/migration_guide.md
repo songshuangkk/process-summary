@@ -1,4 +1,4 @@
-# v2.x → v3.2 迁移指南
+# v2.x → v3.3 迁移指南
 
 ## 目标
 
@@ -15,11 +15,12 @@
    cp references/topology_template.tsv .claude/process-summary/topology.tsv
    ```
 
-5. 每个 topic 建一行；先填 `topic`、`aliases`、`owners`，再补 API、表、事件和直接依赖。
-6. 运行 `bash scripts/topology.sh check`；所有摘要必须恰有一个节点，所有边必须可解析。
+5. 每个 topic 建一行；先填 `topic`、`aliases`、`owners`，再补 API、表和事件。
+6. 创建 `edges.tsv`，每条关系写为 `source / relation / target / evidence / verified_at`；证据必须是代码路径加精确锚点。
+7. 运行 `bash scripts/topology.sh check`；所有摘要必须恰有一个节点，所有边与证据必须可解析。
 
 ## 迁移原则
 
 - 不从旧历史中臆测关系；不确定的边先留空，待代码验证后补充。
-- `depends_on` 只记录直接且有任务影响的关系，使用 `;` 分隔 topic ID。
+- 不从摘要或 import 列表臆测关系；只有验证过代码锚点的关系才进入 `edges.tsv`。
 - 后续任务中持续修正图谱，优先提升锚点和边的准确性，而不是增加无用节点。
