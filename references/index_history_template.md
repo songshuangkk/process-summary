@@ -1,24 +1,16 @@
-# Change History Index (External File)
+# 变更历史索引
 
-Location: `.claude/process-summary/index.md`
+位置：`.claude/process-summary/index.md`
 
-This file stores per-module change history, keeping CLAUDE.md lean.
-
-## Format
+索引只保留最近 30 天的简短入口；完整历史写入 `.claude/process-summary/{year}/{month}.md`。
 
 ```markdown
-# Process Summary — Change History
+## 最近30天变更 (YYYY-MM-DD ~ YYYY-MM-DD)
 
-## ${module_name}
-- [${DATE}] ${change_title}
-- [${DATE}] ${change_title}
-
-## ${module_name2}
-- [${DATE}] ${change_title}
+### YYYY-MM-DD
+- **module/topic**: 一句说明（详见 [MM月详情](YYYY/MM.md)）
 ```
 
-## Rules
-
-- Append new change entries **newest first** (at the top of the module section)
-- Create a new `## ${module_name}` section when a module appears for the first time
-- When this file exceeds 200 lines, run `scripts/maintain.sh .claude/process-summary/index.md` to compress
+- 新日期置顶；同一天按 topic 列出。
+- 不在 index 或模块 `CLAUDE.md` 重复 topic 的现状、决策与风险。
+- 超出 30 天的条目从 index 移除，月度文件保留。

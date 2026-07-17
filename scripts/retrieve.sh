@@ -1,75 +1,79 @@
 #!/bin/bash
-# retrieve.sh — Search hierarchical Claude Code memory by keyword.
+# retrieve.sh — Resolve a v3 summary through the explicit topic topology.
 
 set -euo pipefail
 
-KEYWORD=$(echo "${1:-}" | tr '[:upper:]' '[:lower:]')
 SUMMARY_DIR=".claude/process-summary"
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+TOPOLOGY_SCRIPT="$SCRIPT_DIR/topology.sh"
+MAX_RESULTS=3
 
-if [ -z "$KEYWORD" ]; then
-    echo "Usage: scripts/retrieve.sh <keyword>" >&2
-    exit 1
+if [ "$#" -ne 1 ] || [ -z "$1" ]; then
+    echo "Usage: $0 <topic | API | table | event | owner token>" >&2
+    exit 2
 fi
 
-if [ ! -d "$SUMMARY_DIR" ]; then
-    echo "Error: No summaries found at $SUMMARY_DIR"
-    exit 1
+matches=""
+add_topic() {
+    local topic="$1"
+    [ -f "$SUMMARY_DIR/$topic/summary.md" ] || return
+    if ! printf '%s\n' "$matches" | grep -Fxq "$topic"; then
+        matches="${matches}${matches:+
+}$topic"
+    fi
+}
+
+primary=""
+route=""
+if [ -f "$TOPOLOGY_SCRIPT" ]; then
+    resolved=$(bash "$TOPOLOGY_SCRIPT" resolve "$1")
+    if [ -n "$resolved" ]; then
+        primary=$(printf '%s\n' "$resolved" | sed -n '1s/^[^[:space:]]*[[:space:]]*\([^[:space:]]*\).*/\1/p')
+        route=$(printf '%s\n' "$resolved" | sed -n '1s/^[^[:space:]]*[[:space:]]*[^[:space:]]*[[:space:]]*//p')
+        add_topic "$primary"
+        while IFS=$'\t' read -r neighbor relation; do
+            add_topic "$neighbor"
+            [ "$(printf '%s\n' "$matches" | wc -l | tr -d ' ')" -ge "$MAX_RESULTS" ] && break
+        done < <(bash "$TOPOLOGY_SCRIPT" neighbors "$primary")
+    fi
 fi
 
-# --- Find matching module CLAUDE indexes ---
-MODULE_INDEXES=$(find . -path "./*/CLAUDE.md" -type f 2>/dev/null \
-    ! -path "./.git/*" \
-    ! -path "./.claude/*" \
-    | while IFS= read -r f; do
-        if printf '%s\n' "$f" | tr '[:upper:]' '[:lower:]' | grep -q "$KEYWORD" \
-            || grep -qi "$KEYWORD" "$f"; then
-            printf '%s\n' "$f"
-        fi
-    done || true)
-
-if [ -n "$MODULE_INDEXES" ]; then
-    echo "Matched module CLAUDE.md indexes:"
-    echo "$MODULE_INDEXES" | sed 's/^/  - /'
-    echo ""
+if [ -z "$matches" ] && [ -f "$SUMMARY_DIR/$1/summary.md" ]; then
+    add_topic "$1"
+    route="direct-topic"
 fi
 
-# --- Find matching cold summaries ---
-DIR_MATCHES=$(ls "$SUMMARY_DIR" 2>/dev/null | grep -i "$KEYWORD" || true)
-CONTENT_MATCHES=$(grep -ril "$KEYWORD" "$SUMMARY_DIR" 2>/dev/null | grep "summary.md" || true)
+if [ -z "$matches" ]; then
+    while IFS= read -r file; do
+        add_topic "${file#"$SUMMARY_DIR"/}"
+        [ "$(printf '%s\n' "$matches" | wc -l | tr -d ' ')" -ge "$MAX_RESULTS" ] && break
+    done < <(rg -il --fixed-strings --glob 'summary.md' "$1" "$SUMMARY_DIR" | sed "s#^$SUMMARY_DIR/##; s#/summary.md\$##" | sort)
+    route="summary-text-fallback"
+fi
 
-ALL_FILES=""
-for dir in $DIR_MATCHES; do
-    f="$SUMMARY_DIR/$dir/summary.md"
-    [ -f "$f" ] && ALL_FILES="$ALL_FILES $f"
-done
-for f in $CONTENT_MATCHES; do
-    ALL_FILES="$ALL_FILES $f"
-done
-ALL_FILES=$(echo "$ALL_FILES" | tr ' ' '\n' | sort -u | grep -v '^$' || true)
-
-if [ -z "$ALL_FILES" ]; then
-    echo "No summaries found matching: $KEYWORD"
+if [ -z "$matches" ]; then
+    echo "No topic matched: $1"
     exit 0
 fi
 
-for FILE in $ALL_FILES; do
-    MODULE=$(basename "$(dirname "$FILE")")
+print_section() {
+    local file="$1" heading="$2"
+    awk -v heading="$heading" '$0 == "## " heading { found=1; next } found && /^## / { exit } found { print }' "$file"
+}
+
+echo "Topology route: ${primary:-unknown} (${route:-fallback})"
+while IFS= read -r topic; do
+    [ -z "$topic" ] && continue
+    file="$SUMMARY_DIR/$topic/summary.md"
     echo "=============================="
-    echo "Summary: $MODULE"
-    echo "File: $FILE"
+    echo "Topic: $topic"
     echo "=============================="
-
+    for heading in '现状' '技术决策' '注意事项' '相关模块'; do
+        echo ""
+        echo "--- $heading ---"
+        print_section "$file" "$heading"
+    done
     echo ""
-    echo "--- Overview ---"
-    awk '/^## Overview/{found=1; next} found && /^##/{exit} found{print}' "$FILE"
-
-    echo ""
-    echo "--- Dependencies ---"
-    awk '/^## Dependencies/{found=1; next} found && /^##/{exit} found{print}' "$FILE"
-
-    echo ""
-    echo "--- Watch Out (all historical) ---"
-    grep "^\*\*Watch Out\*\*:" "$FILE" | sed 's/\*\*Watch Out\*\*:/⚠️ /' || echo "(none)"
-
-    echo ""
-done
+done <<EOF
+$matches
+EOF
